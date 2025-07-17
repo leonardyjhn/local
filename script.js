@@ -193,7 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function configurarEventos() {
     // Acceso
     btnAcceder.addEventListener('click', validarAcceso);
-    btnPrueba.addEventListener('click', activarPrueba);
+   
     btnSuperusuario.addEventListener('click', mostrarModalSuperusuario);
     btnContacto.addEventListener('click', () => {
         window.open('https://wa.me/584245244171', '_blank');
@@ -356,7 +356,7 @@ function activarPrueba() {
         accesoContainer.classList.add('hidden');
         mainContainer.classList.remove('hidden');
         mostrarSeccion('rifas');
-        alert('Modo prueba activado por 1 días. ¡Disfruta de la aplicación!');
+        alert('Modo prueba activado por 7 días. ¡Disfruta de la aplicación!');
     }).catch(error => {
         console.error('Error al activar prueba:', error);
         alert('Error al activar modo prueba. Intenta nuevamente.');
@@ -384,7 +384,7 @@ function calcularDiasRestantesPrueba() {
     
     const hoy = new Date();
     const finPrueba = new Date(fechaInicioPrueba);
-    finPrueba.setDate(finPrueba.getDate() + 1);
+    finPrueba.setDate(finPrueba.getDate() + 7);
     
     const diffTime = finPrueba - hoy;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -400,7 +400,7 @@ function mostrarModalSuperusuario() {
 
 function validarSuperusuario() {
     const clave = document.getElementById('superusuario-clave').value.trim();
-    const claveSuperusuario = "admin123"; // Cambia esto por una clave segura
+    const claveSuperusuario = "Mkgothicp.01"; // Cambia esto por una clave segura
     
     if (!clave) {
         alert('Por favor ingresa la clave de superusuario');
