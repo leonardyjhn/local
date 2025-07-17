@@ -790,3 +790,9 @@ button i {
 .tab-content.active {
     display: block;
 }
+
+#btn-prueba {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
