@@ -356,7 +356,7 @@ function activarPrueba() {
         accesoContainer.classList.add('hidden');
         mainContainer.classList.remove('hidden');
         mostrarSeccion('rifas');
-        alert('Modo prueba activado por 7 días. ¡Disfruta de la aplicación!');
+        alert('Modo prueba activado por 1 días. ¡Disfruta de la aplicación!');
     }).catch(error => {
         console.error('Error al activar prueba:', error);
         alert('Error al activar modo prueba. Intenta nuevamente.');
@@ -384,7 +384,7 @@ function calcularDiasRestantesPrueba() {
     
     const hoy = new Date();
     const finPrueba = new Date(fechaInicioPrueba);
-    finPrueba.setDate(finPrueba.getDate() + 7);
+    finPrueba.setDate(finPrueba.getDate() + 1);
     
     const diffTime = finPrueba - hoy;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -1571,177 +1571,211 @@ async function eliminarCliente(id) {
     }
 }
 
-function enviarWhatsApp(cliente) {
+async function enviarWhatsApp(cliente) {
     const rifa = rifas.find(r => r.id === cliente.rifaId);
-    const plantilla = localStorage.getItem('rifasSucre_plantilla') || '';
     
-    // Limpiar los números para mostrar (quitar los estados)
-    const numerosLimpios = cliente.numeros.split(',').map(num => {
-        return num.includes(':') ? num.split(':')[0] : num;
-    }).join(', ');
-    
-    let mensaje = plantilla
-        .replace(/{nombre}/g, cliente.nombre)
-        .replace(/{rifa}/g, rifa.nombre)
-        .replace(/{numeros}/g, numerosLimpios)
-        .replace(/{estado}/g, cliente.estado);
-    
-    const url = `https://wa.me/${cliente.telefono}?text=${encodeURIComponent(mensaje)}`;
-    window.open(url, '_blank');
+    try {
+        // Obtener plantilla de IndexedDB
+        const config = await obtenerTodos('configuracion');
+        const plantilla = config.find(c => c.clave === 'plantillaMensaje')?.valor || 
+                         '¡Hola {nombre}! Tus números {numeros} en la rifa "{rifa}" están {estado}. ¡Gracias por participar!';
+        
+        // Limpiar los números para mostrar
+        const numerosLimpios = cliente.numeros.split(',').map(num => {
+            return num.includes(':') ? num.split(':')[0] : num;
+        }).join(', ');
+        
+        let mensaje = plantilla
+            .replace(/{nombre}/g, cliente.nombre)
+            .replace(/{rifa}/g, rifa.nombre)
+            .replace(/{numeros}/g, numerosLimpios)
+            .replace(/{estado}/g, cliente.estado);
+        
+        const url = `https://wa.me/${cliente.telefono}?text=${encodeURIComponent(mensaje)}`;
+        window.open(url, '_blank');
+    } catch (error) {
+        console.error('Error al enviar WhatsApp:', error);
+        alert('Error al preparar el mensaje. Intenta nuevamente.');
+    }
 }
 
-function generarTicket(cliente) {
+async function generarTicket(cliente) {
     const rifa = rifas.find(r => r.id === cliente.rifaId);
     if (!rifa) {
         alert('No se encontró la rifa asociada al cliente');
         return;
     }
 
-    const ticketElement = document.createElement('div');
-    ticketElement.style.cssText = `
-        width: 300px;
-        padding: 20px;
-        background: white;
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        font-family: Arial, sans-serif;
-        color: #333;
-    `;
+    try {
+        // Obtener plantilla de IndexedDB
+        const config = await obtenerTodos('configuracion');
+        const tituloTicket = config.find(c => c.clave === 'plantillaTicketTitulo')?.valor || 'TICKET DE RIFA';
+        let mensajeTicket = config.find(c => c.clave === 'plantillaTicketMensaje')?.valor || 
+            'Cliente: {nombre}\nTeléfono: {telefono}\nNúmeros: {numeros}\nEstado: {estado}\nFecha: {fecha}';
 
-    const numerosHTML = cliente.numeros.split(',').map(numCompleto => {
-        const [num, estadoIndividual] = numCompleto.includes(':') ? 
-            numCompleto.split(':') : 
-            [numCompleto, cliente.estado];
+        const ticketElement = document.createElement('div');
+        ticketElement.style.cssText = `
+            width: 300px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            font-family: Arial, sans-serif;
+            color: #333;
+        `;
+
+        const numerosHTML = cliente.numeros.split(',').map(numCompleto => {
+            const [num, estadoIndividual] = numCompleto.includes(':') ? 
+                numCompleto.split(':') : 
+                [numCompleto, cliente.estado];
+                
+            return `<span style="display: inline-block; margin: 2px; padding: 2px 5px; 
+                    border-radius: 3px; border: 1px solid #ddd; 
+                    background: ${estadoIndividual === 'pagado' ? '#2ecc71' : '#f1c40f'}; 
+                    color: ${estadoIndividual === 'pagado' ? 'white' : '#333'}">
+                    ${num}
+                    </span>`;
+        }).join('');
+
+        // Limpiar los números para mostrar en el mensaje (quitar los estados)
+        const numerosLimpios = cliente.numeros.split(',').map(num => {
+            return num.includes(':') ? num.split(':')[0] : num;
+        }).join(', ');
+
+        mensajeTicket = mensajeTicket
+            .replace(/{nombre}/g, cliente.nombre)
+            .replace(/{telefono}/g, cliente.telefono)
+            .replace(/{rifa}/g, rifa.nombre)
+            .replace(/{numeros}/g, numerosLimpios)
+            .replace(/{estado}/g, cliente.estado)
+            .replace(/{fecha}/g, new Date().toLocaleDateString());
+
+        const mensajeHTML = mensajeTicket.split('\n').map(line => 
+            `<div style="margin-bottom: 8px;">${line}</div>`
+        ).join('');
+
+        ticketElement.innerHTML = `
+            <h2 style="text-align: center; margin-bottom: 15px; color: #2c3e50;">${tituloTicket}</h2>
+            ${mensajeHTML}
+            <div style="margin-bottom: 15px;"><strong>Números:</strong><br>${numerosHTML}</div>
+            <div style="text-align: center; font-size: 12px; color: #7f8c8d;">
+                ${new Date().toLocaleDateString()} - ${appTitle.textContent}
+            </div>
+        `;
+
+        document.body.appendChild(ticketElement);
+
+        const loadingMessage = document.createElement('div');
+        loadingMessage.textContent = 'Generando ticket...';
+        loadingMessage.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            z-index: 9999;
+        `;
+        document.body.appendChild(loadingMessage);
+
+        html2canvas(ticketElement).then(canvas => {
+            const image = canvas.toDataURL('image/png');
+            const url = `https://wa.me/${cliente.telefono}?text=${encodeURIComponent('Aquí está tu ticket de rifa')}`;
             
-        return `<span style="display: inline-block; margin: 2px; padding: 2px 5px; 
-                border-radius: 3px; border: 1px solid #ddd; 
-                background: ${estadoIndividual === 'pagado' ? '#2ecc71' : '#f1c40f'}; 
-                color: ${estadoIndividual === 'pagado' ? 'white' : '#333'}">
-                ${num}
-                </span>`;
-    }).join('');
-
-    const tituloTicket = localStorage.getItem('plantillaTicketTitulo') || 'TICKET DE RIFA';
-    let mensajeTicket = localStorage.getItem('plantillaTicketMensaje') || 
-        'Cliente: {nombre}\nTeléfono: {telefono}\nNúmeros: {numeros}\nEstado: {estado}\nFecha: {fecha}';
-
-    // Limpiar los números para mostrar en el mensaje (quitar los estados)
-    const numerosLimpios = cliente.numeros.split(',').map(num => {
-        return num.includes(':') ? num.split(':')[0] : num;
-    }).join(', ');
-
-    mensajeTicket = mensajeTicket
-        .replace(/{nombre}/g, cliente.nombre)
-        .replace(/{telefono}/g, cliente.telefono)
-        .replace(/{rifa}/g, rifa.nombre)
-        .replace(/{numeros}/g, numerosLimpios)
-        .replace(/{estado}/g, cliente.estado)
-        .replace(/{fecha}/g, new Date().toLocaleDateString());
-
-    const mensajeHTML = mensajeTicket.split('\n').map(line => 
-        `<div style="margin-bottom: 8px;">${line}</div>`
-    ).join('');
-
-    ticketElement.innerHTML = `
-        <h2 style="text-align: center; margin-bottom: 15px; color: #2c3e50;">${tituloTicket}</h2>
-        ${mensajeHTML}
-        <div style="margin-bottom: 15px;"><strong>Números:</strong><br>${numerosHTML}</div>
-        <div style="text-align: center; font-size: 12px; color: #7f8c8d;">
-            ${new Date().toLocaleDateString()} - ${appTitle.textContent}
-        </div>
-    `;
-
-    document.body.appendChild(ticketElement);
-
-    const loadingMessage = document.createElement('div');
-    loadingMessage.textContent = 'Generando ticket...';
-    loadingMessage.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: rgba(0,0,0,0.8);
-        color: white;
-        padding: 20px;
-        border-radius: 5px;
-        z-index: 9999;
-    `;
-    document.body.appendChild(loadingMessage);
-
-    html2canvas(ticketElement).then(canvas => {
-        const image = canvas.toDataURL('image/png');
-        const url = `https://wa.me/${cliente.telefono}?text=${encodeURIComponent('Aquí está tu ticket de rifa')}`;
-        
-        const link = document.createElement('a');
-        link.href = image;
-        link.download = `ticket_${cliente.nombre}.png`;
-        
-        const whatsappWindow = window.open(url, '_blank');
-        
-        setTimeout(() => {
+            const link = document.createElement('a');
+            link.href = image;
+            link.download = `ticket_${cliente.nombre}.png`;
+            
+            const whatsappWindow = window.open(url, '_blank');
+            
+            setTimeout(() => {
+                document.body.removeChild(ticketElement);
+                document.body.removeChild(loadingMessage);
+                
+                if (whatsappWindow) {
+                    setTimeout(() => {
+                        link.click();
+                    }, 1000);
+                } else {
+                    link.click();
+                }
+            }, 1000);
+        }).catch(err => {
+            console.error('Error al generar ticket:', err);
+            alert('Error al generar el ticket');
             document.body.removeChild(ticketElement);
             document.body.removeChild(loadingMessage);
-            
-            if (whatsappWindow) {
-                setTimeout(() => {
-                    link.click();
-                }, 1000);
-            } else {
-                link.click();
-            }
-        }, 1000);
-    }).catch(err => {
-        console.error('Error al generar ticket:', err);
-        alert('Error al generar el ticket');
-        document.body.removeChild(ticketElement);
-        document.body.removeChild(loadingMessage);
-    });
+        });
+    } catch (error) {
+        console.error('Error al generar ticket:', error);
+        alert('Error al generar el ticket. Intenta nuevamente.');
+    }
 }
 
-function enviarRezagados(cliente) {
+async function enviarRezagados(cliente) {
     const rifa = rifas.find(r => r.id === cliente.rifaId);
-    const plantilla = localStorage.getItem('rifasSucre_plantilla_rezagados') || 
-                     localStorage.getItem('rifasSucre_plantilla') || 
-                     '¡Hola {nombre}! Recordatorio: Tus números {numeros} en la rifa "{rifa}" están como {estado}. Por favor completa tu pago. ¡Gracias!';
     
-    // Limpiar los números para mostrar (quitar los estados)
-    const numerosLimpios = cliente.numeros.split(',').map(num => {
-        return num.includes(':') ? num.split(':')[0] : num;
-    }).join(', ');
-    
-    let mensaje = plantilla
-        .replace(/{nombre}/g, cliente.nombre)
-        .replace(/{rifa}/g, rifa.nombre)
-        .replace(/{numeros}/g, numerosLimpios)
-        .replace(/{estado}/g, cliente.estado);
-    
-    const url = `https://wa.me/${cliente.telefono}?text=${encodeURIComponent(mensaje)}`;
-    window.open(url, '_blank');
+    try {
+        // Obtener plantilla de IndexedDB
+        const config = await obtenerTodos('configuracion');
+        const plantilla = config.find(c => c.clave === 'plantillaRezagados')?.valor || 
+                         '¡Hola {nombre}! Recordatorio: Tus números {numeros} en la rifa "{rifa}" están como {estado}. Por favor completa tu pago. ¡Gracias!';
+        
+        // Limpiar los números para mostrar
+        const numerosLimpios = cliente.numeros.split(',').map(num => {
+            return num.includes(':') ? num.split(':')[0] : num;
+        }).join(', ');
+        
+        let mensaje = plantilla
+            .replace(/{nombre}/g, cliente.nombre)
+            .replace(/{rifa}/g, rifa.nombre)
+            .replace(/{numeros}/g, numerosLimpios)
+            .replace(/{estado}/g, cliente.estado);
+        
+        const url = `https://wa.me/${cliente.telefono}?text=${encodeURIComponent(mensaje)}`;
+        window.open(url, '_blank');
+    } catch (error) {
+        console.error('Error al enviar mensaje de rezagados:', error);
+        alert('Error al preparar el mensaje. Intenta nuevamente.');
+    }
 }
-
 async function mostrarModalPlantilla() {
     try {
-        // Cargar plantillas de la base de datos
+        // Cargar plantillas de IndexedDB
         const config = await obtenerTodos('configuracion');
         
-        const plantillaWhatsApp = config.find(c => c.clave === 'plantillaMensaje')?.valor || '';
-        const plantillaRezagados = config.find(c => c.clave === 'plantillaRezagados')?.valor || plantillaWhatsApp;
+        const plantillaWhatsApp = config.find(c => c.clave === 'plantillaMensaje')?.valor || 
+                                '¡Hola {nombre}! Tus números {numeros} en la rifa "{rifa}" están {estado}. ¡Gracias por participar!';
+        
+        const plantillaRezagados = config.find(c => c.clave === 'plantillaRezagados')?.valor || 
+                                 '¡Hola {nombre}! Recordatorio: Tus números {numeros} en la rifa "{rifa}" están como {estado}. Por favor completa tu pago. ¡Gracias!';
         
         document.getElementById('plantilla-mensaje').value = plantillaWhatsApp;
         document.getElementById('plantilla-rezagados').value = plantillaRezagados;
         
-        // Configurar eventos de pestañas
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        // Configurar el evento del botón guardar
+        document.getElementById('btn-guardar-plantilla').onclick = guardarPlantillas;
+        
+        // Configurar eventos para cambiar pestañas
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        tabButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                // Quitar clase active de todos los botones y contenidos
+                document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
                 
+                // Agregar clase active al botón clickeado
                 this.classList.add('active');
-                document.getElementById(`${this.dataset.tab}-tab`).classList.add('active');
+                
+                // Mostrar el contenido correspondiente
+                const tabId = this.dataset.tab + '-tab';
+                document.getElementById(tabId).classList.add('active');
             });
         });
         
-        document.getElementById('btn-guardar-plantilla').onclick = guardarPlantillas;
+        // Mostrar el modal
         plantillaModal.classList.remove('hidden');
     } catch (error) {
         console.error('Error al cargar plantillas:', error);
